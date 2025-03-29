@@ -18,7 +18,8 @@ async function getAllVessels() {
   try {
     const start = performance.now();
     
-    const response = await axios.get(`${API_URL}/vessel_list`, {
+    // Using vessel_find endpoint for consistency with getUSVessels
+    const response = await axios.get(`${API_URL}/vessel_find`, {
       params: {
         'api-key': API_KEY
         // No country filter
@@ -26,15 +27,32 @@ async function getAllVessels() {
     });
     
     const end = performance.now();
-    console.log(`Fetched ${response.data.length} vessels in ${(end - start).toFixed(2)}ms`);
+    
+    // Check the structure of the response to handle it correctly
+    let vessels = [];
+    if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      vessels = response.data.data;
+      console.log(`Fetched ${vessels.length} vessels in ${(end - start).toFixed(2)}ms`);
+    } else if (Array.isArray(response.data)) {
+      vessels = response.data;
+      console.log(`Fetched ${vessels.length} vessels in ${(end - start).toFixed(2)}ms`);
+    } else {
+      console.log(`Received response but no vessels found, response structure might be different`);
+      console.log(`Response structure:`, JSON.stringify(response.data).substring(0, 200) + '...');
+    }
     
     // Update timestamps for AIS shutoff detection
     const currentTime = Date.now();
     
     // Update vessel cache
     const newVesselCache = {};
-    response.data.forEach(vessel => {
+    vessels.forEach(vessel => {
       const { mmsi } = vessel;
+      
+      if (!mmsi) {
+        console.log('Vessel without MMSI found, skipping:', vessel);
+        return; // Skip vessels without MMSI
+      }
       
       // Add timestamp for new vessels
       if (!vesselCache[mmsi]) {
@@ -76,6 +94,11 @@ async function getAllVessels() {
     };
   } catch (error) {
     console.error('Error fetching vessels:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data).substring(0, 500));
+    }
+    
     return {
       vessels: Object.values(vesselCache),
       missingVessels: [],
@@ -91,22 +114,41 @@ async function getUSVessels() {
   try {
     const start = performance.now();
     
-    const response = await axios.get(`${API_URL}/vessel_list`, {
+    // Using vessel_find endpoint as specified in the curl command
+    const response = await axios.get(`${API_URL}/vessel_find`, {
       params: {
-        'api-key': API_KEY
+        'api-key': API_KEY,
+        'country_iso': 'US'
       }
     });
     
     const end = performance.now();
-    console.log(`Fetched ${response.data.length} US vessels in ${(end - start).toFixed(2)}ms`);
+    
+    // Check the structure of the response to handle it correctly
+    let vessels = [];
+    if (response.data && response.data.data && Array.isArray(response.data.data)) {
+      vessels = response.data.data;
+      console.log(`Fetched ${vessels.length} US vessels in ${(end - start).toFixed(2)}ms`);
+    } else if (Array.isArray(response.data)) {
+      vessels = response.data;
+      console.log(`Fetched ${vessels.length} US vessels in ${(end - start).toFixed(2)}ms`);
+    } else {
+      console.log(`Received response but no vessels found, response structure might be different`);
+      console.log(`Response structure:`, JSON.stringify(response.data).substring(0, 200) + '...');
+    }
     
     // Update timestamps for AIS shutoff detection
     const currentTime = Date.now();
     
     // Update vessel cache
     const newVesselCache = {};
-    response.data.forEach(vessel => {
+    vessels.forEach(vessel => {
       const { mmsi } = vessel;
+      
+      if (!mmsi) {
+        console.log('Vessel without MMSI found, skipping:', vessel);
+        return; // Skip vessels without MMSI
+      }
       
       // Add timestamp for new vessels
       if (!vesselCache[mmsi]) {
@@ -148,6 +190,11 @@ async function getUSVessels() {
     };
   } catch (error) {
     console.error('Error fetching US vessels:', error.message);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data).substring(0, 500));
+    }
+    
     return {
       vessels: Object.values(vesselCache),
       missingVessels: [],

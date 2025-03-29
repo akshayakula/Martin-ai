@@ -1,265 +1,237 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const ChatPanel = () => {
-  const [messages, setMessages] = useState([
-    {
-      sender: 'agent',
-      text: 'Hello, I am MartinAI. I can provide information about vessels in the monitored zone. How can I help you today?',
-      timestamp: new Date()
-    }
-  ]);
-  const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [availableEndpoints, setAvailableEndpoints] = useState({});
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
+  const [expandedMessages, setExpandedMessages] = useState({});
   
-  // Auto scroll to bottom when messages change
-  useEffect(() => {
+  // Scroll to bottom of chat
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  useEffect(() => {
+    scrollToBottom();
   }, [messages]);
   
-  // Fetch available endpoints on component mount
+  // Add welcome message on component mount
   useEffect(() => {
-    const fetchEndpoints = async () => {
-      try {
-        const response = await fetch('http://localhost:5050/api/agent/endpoints');
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableEndpoints(data.endpoints || {});
-        }
-      } catch (error) {
-        console.error('Error fetching endpoints:', error);
+    setMessages([
+      {
+        role: 'assistant',
+        content: `Welcome to the Washington DC Area Maritime Intelligence System. I can provide detailed information about:
+
+• Vessels currently navigating the eastern seaboard with focus on those approaching the DC area
+• Port operations in the Washington DC region, Baltimore, and Alexandria
+• Maritime security concerns and anomalies in the Chesapeake Bay and Potomac River
+• Historical context of maritime activities in the nation's capital region
+• Strategic significance of waterways near Washington DC
+
+How can I assist with your maritime intelligence needs today?`
       }
-    };
-    
-    fetchEndpoints();
+    ]);
   }, []);
   
-  // Handle sending a message
-  const handleSendMessage = async () => {
-    if (!inputText.trim()) return;
+  // Toggle message expansion
+  const toggleMessageExpansion = (id) => {
+    setExpandedMessages(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+  
+  // Handle sending message
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
     
-    // Add user message to chat
+    if (!input.trim()) return;
+    
     const userMessage = {
-      sender: 'user',
-      text: inputText,
-      timestamp: new Date()
+      role: 'user',
+      content: input
     };
     
     setMessages(prev => [...prev, userMessage]);
-    setInputText('');
-    setIsLoading(true);
+    setInput('');
+    setLoading(true);
     
     try {
-      // Call the backend API
       const response = await fetch('http://localhost:5050/api/agent/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ message: inputText })
+        body: JSON.stringify({ message: input })
       });
-      
-      if (!response.ok) {
-        throw new Error(`API responded with status: ${response.status}`);
-      }
       
       const data = await response.json();
       
-      // Add agent response to chat
-      const agentResponse = {
-        sender: 'agent',
-        text: data.reply,
-        timestamp: new Date(data.timestamp) || new Date(),
-        functionCalled: data.functionCalled,
-        isComplexQuery: data.isComplexQuery,
-        usingFallback: data.usingFallback
-      };
+      // Check if response requires expansion option (if longer than 1000 characters)
+      const needsExpansion = data.reply.length > 1000;
+      const messageId = Date.now().toString();
       
-      setMessages(prev => [...prev, agentResponse]);
+      // Add bot message
+      setMessages(prev => [
+        ...prev, 
+        {
+          role: 'assistant',
+          content: data.reply,
+          timestamp: data.timestamp,
+          id: messageId,
+          needsExpansion
+        }
+      ]);
+      
+      // If the message is very long, default to collapsed state
+      if (needsExpansion) {
+        setExpandedMessages(prev => ({
+          ...prev,
+          [messageId]: false // Collapsed by default
+        }));
+      }
+      
     } catch (error) {
-      console.error('Error sending message to agent:', error);
+      console.error('Error sending message:', error);
       
       // Add error message
-      setMessages(prev => [...prev, {
-        sender: 'agent',
-        text: 'I\'m sorry, I encountered an error processing your request. Please try again.',
-        timestamp: new Date(),
-        isError: true
-      }]);
+      setMessages(prev => [
+        ...prev, 
+        {
+          role: 'assistant',
+          content: 'I apologize, but I encountered an error processing your request. Please try again.',
+          error: true
+        }
+      ]);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
   
-  // Handle pressing Enter key
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
-  };
-  
-  // Get a description for the API endpoint
-  const getEndpointDescription = (endpoint) => {
-    if (!endpoint) return null;
-    
-    // For complex queries that use multiple endpoints
-    if (endpoint.includes(',')) {
-      return 'Multiple endpoints used to answer your question';
+  // Function to determine how to display message content
+  const getDisplayContent = (message) => {
+    if (!message.needsExpansion || expandedMessages[message.id]) {
+      return message.content;
     }
     
-    // Remove any "get" prefix from function name to match endpoint key
-    const endpointKey = endpoint.replace(/^get/, '').toLowerCase();
-    
-    // Map function names to endpoint descriptions
-    const functionToEndpointMap = {
-      'getAllVessels': 'vessel_list',
-      'getUSVessels': 'vessel_list',
-      'trackVesselByMMSI': 'vessel_pro',
-      'getVesselByIMO': 'vessel_info',
-      'getVesselsInArea': 'vessel_inarea',
-      'searchVesselsByName': 'vessel_search',
-      'getVesselHistory': 'vessel_history',
-      'getPortInfo': 'port_info',
-      'getVesselsInPort': 'port_vessels',
-      'getAnomalies': 'anomalies'
-    };
-    
-    const mappedEndpoint = functionToEndpointMap[endpoint];
-    
-    return mappedEndpoint && availableEndpoints[mappedEndpoint] 
-      ? availableEndpoints[mappedEndpoint] 
-      : `Using ${endpoint}`;
+    // Show first ~600 characters with ellipsis if collapsed
+    return message.content.substring(0, 600) + '...';
   };
+
+  // Prepare a set of detailed maritime queries to help users
+  const suggestedQueries = [
+    "What vessels are currently approaching the Washington DC area?",
+    "Tell me about the historical significance of the Port of Baltimore",
+    "What maritime security measures are in place around DC's waterways?",
+    "Analyze vessel traffic patterns in the Chesapeake Bay",
+    "Explain the strategic importance of Alexandria's port facilities",
+    "What are the current anomalies detected in the DC maritime area?"
+  ];
   
-  // Function to add sample queries
-  const addSampleQuery = (query) => {
-    setInputText(query);
+  // Suggest a random query from the list
+  const getRandomSuggestion = () => {
+    const randomIndex = Math.floor(Math.random() * suggestedQueries.length);
+    return suggestedQueries[randomIndex];
   };
   
   return (
     <div className="flex flex-col h-full">
-      {/* Chat messages */}
-      <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div 
-              className={`max-w-[80%] rounded-lg p-3 ${
-                msg.sender === 'user' 
-                  ? 'bg-accentCyan text-background' 
-                  : msg.isError 
-                    ? 'bg-alertRed bg-opacity-20 text-alertRed' 
-                    : 'bg-border bg-opacity-30'
+      <div className="flex-grow overflow-y-auto p-4 space-y-4 mb-4 border border-border rounded-md bg-backgroundAlt">
+        {messages.map((message, index) => (
+          <div
+            key={index}
+            className={`chat-message ${
+              message.role === 'user' ? 'text-right' : ''
+            }`}
+          >
+            <div
+              className={`inline-block max-w-[90%] p-3 rounded-lg ${
+                message.role === 'user'
+                  ? 'bg-accentBlue text-white rounded-tr-none'
+                  : message.error
+                  ? 'bg-alertRed bg-opacity-10 text-alertRed rounded-tl-none'
+                  : 'bg-card border border-border rounded-tl-none'
               }`}
             >
-              <p>{msg.text}</p>
+              <div className="whitespace-pre-wrap">
+                {getDisplayContent(message)}
+              </div>
               
-              {/* Show endpoint info if available */}
-              {msg.sender === 'agent' && msg.functionCalled && !msg.isError && (
-                <div className="mt-2 text-xs bg-accentPurple bg-opacity-10 p-1 rounded">
-                  <span className="text-accentPurple font-medium">
-                    {msg.isComplexQuery ? 'Multi-API: ' : 'API: '}
-                  </span>
-                  <span>{getEndpointDescription(msg.functionCalled)}</span>
-                </div>
+              {message.needsExpansion && (
+                <button
+                  onClick={() => toggleMessageExpansion(message.id)}
+                  className="text-xs mt-2 text-accentBlue hover:underline"
+                >
+                  {expandedMessages[message.id] ? 'Show Less' : 'Read Full Response'}
+                </button>
               )}
               
-              {/* Show fallback info if using fallback */}
-              {msg.sender === 'agent' && msg.usingFallback && (
-                <div className="mt-2 text-xs bg-accentBlue bg-opacity-10 p-1 rounded">
-                  <span className="text-accentBlue font-medium">Using standard response</span>
+              {message.timestamp && (
+                <div className="text-xs text-textSecondary mt-2">
+                  {new Date(message.timestamp).toLocaleTimeString()}
                 </div>
               )}
-              
-              <p className="text-xs opacity-70 mt-1">
-                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
             </div>
           </div>
         ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-lg p-3 bg-border bg-opacity-30">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 rounded-full bg-text opacity-60 animate-bounce"></div>
-                <div className="w-2 h-2 rounded-full bg-text opacity-60 animate-bounce delay-100"></div>
-                <div className="w-2 h-2 rounded-full bg-text opacity-60 animate-bounce delay-200"></div>
-              </div>
-            </div>
+        <div ref={messagesEndRef} />
+        
+        {/* Loading indicator */}
+        {loading && (
+          <div className="flex items-center">
+            <div className="w-2 h-2 bg-border rounded-full animate-pulse mr-1"></div>
+            <div className="w-2 h-2 bg-border rounded-full animate-pulse mr-1" style={{ animationDelay: '0.2s' }}></div>
+            <div className="w-2 h-2 bg-border rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
           </div>
         )}
-        <div ref={messagesEndRef} />
       </div>
       
-      {/* Input area */}
-      <div className="border-t border-border pt-4">
-        <div className="flex items-center">
-          <textarea
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask MartinAI about vessels or anomalies..."
-            className="input flex-grow resize-none h-12 py-2"
-            rows={1}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputText.trim() || isLoading}
-            className="btn-primary ml-2 h-12"
-          >
-            Send
-          </button>
-        </div>
-        
-        {/* Example queries */}
-        <div className="mt-4 mb-2">
-          <p className="text-xs text-text opacity-70 mb-2">Try these example queries:</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => addSampleQuery('List all vessels near San Francisco')}
-            className="text-xs bg-accentPurple bg-opacity-20 text-accentPurple px-2 py-1 rounded-md"
-          >
-            Vessels near San Francisco
-          </button>
-          <button
-            onClick={() => addSampleQuery('Track vessel with MMSI 366962000')}
-            className="text-xs bg-accentBlue bg-opacity-20 text-accentBlue px-2 py-1 rounded-md"
-          >
-            Track specific vessel
-          </button>
-          <button
-            onClick={() => addSampleQuery('What vessels are in Singapore port?')}
-            className="text-xs bg-accentCyan bg-opacity-20 text-accentCyan px-2 py-1 rounded-md"
-          >
-            Vessels in port
-          </button>
-          <button
-            onClick={() => addSampleQuery('Search for vessel named MAERSK')}
-            className="text-xs bg-text bg-opacity-20 text-text px-2 py-1 rounded-md"
-          >
-            Search by name
-          </button>
-          <button
-            onClick={() => addSampleQuery('Show me vessel history for MMSI 366962000')}
-            className="text-xs bg-accentGreen bg-opacity-20 text-accentGreen px-2 py-1 rounded-md"
-          >
-            Vessel history
-          </button>
-          <button
-            onClick={() => addSampleQuery('Which vessels turned off AIS recently?')}
-            className="text-xs bg-alertRed bg-opacity-20 text-alertRed px-2 py-1 rounded-md"
-          >
-            AIS shutoffs
-          </button>
-          <button
-            onClick={() => addSampleQuery('Compare vessels in Singapore and Hong Kong ports')}
-            className="text-xs bg-accentYellow bg-opacity-20 text-accentYellow px-2 py-1 rounded-md"
-          >
-            Compare ports
-          </button>
-        </div>
+      {/* Message entry */}
+      <form onSubmit={handleSendMessage} className="flex gap-2">
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={`Try: "${getRandomSuggestion()}"`}
+          className="flex-grow p-2 border border-border rounded-md bg-background text-text"
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={loading || !input.trim()}
+          className="px-4 py-2 bg-accentBlue text-white rounded-md hover:bg-blue-600 disabled:opacity-50 transition-colors"
+        >
+          Send
+        </button>
+      </form>
+      
+      {/* Query suggestion chips */}
+      <div className="flex flex-wrap gap-2 mt-3">
+        <button 
+          onClick={() => setInput("Tell me about vessels near DC")}
+          className="text-xs bg-backgroundAlt hover:bg-border px-3 py-1 rounded-full text-textSecondary"
+        >
+          DC Vessels
+        </button>
+        <button 
+          onClick={() => setInput("Analyze Port of Baltimore operations")}
+          className="text-xs bg-backgroundAlt hover:bg-border px-3 py-1 rounded-full text-textSecondary"
+        >
+          Baltimore Port
+        </button>
+        <button 
+          onClick={() => setInput("Potomac River maritime security")}
+          className="text-xs bg-backgroundAlt hover:bg-border px-3 py-1 rounded-full text-textSecondary"
+        >
+          Potomac Security
+        </button>
+        <button 
+          onClick={() => setInput("Eastern seaboard vessel trends")}
+          className="text-xs bg-backgroundAlt hover:bg-border px-3 py-1 rounded-full text-textSecondary"
+        >
+          Seaboard Trends
+        </button>
       </div>
     </div>
   );

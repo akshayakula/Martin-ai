@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
 import GeofenceStep from './GeofenceStep';
-import PhoneNumberStep from './PhoneNumberStep';
+import EmailStep from './EmailStep';
 import { useGeofence } from './GeofenceContext';
 
 // Step enum
 const STEPS = {
   GEOFENCE: 0,
-  PHONE: 1,
+  EMAIL: 1,
   COMPLETE: 2
 };
 
 const WizardFlow = ({ onSetupComplete }) => {
   // Current step in the wizard
   const [currentStep, setCurrentStep] = useState(STEPS.GEOFENCE);
-  const { geofence, phoneNumber } = useGeofence();
+  const { geofence, userEmail, coastGuardEmail } = useGeofence();
   
   // Handle next step
   const handleNext = () => {
@@ -21,7 +21,7 @@ const WizardFlow = ({ onSetupComplete }) => {
       setCurrentStep(currentStep + 1);
     }
     
-    if (currentStep === STEPS.PHONE) {
+    if (currentStep === STEPS.EMAIL) {
       // Wizard is complete
       onSetupComplete();
     }
@@ -34,13 +34,21 @@ const WizardFlow = ({ onSetupComplete }) => {
     }
   };
   
+  // Validate email format
+  const isValidEmail = (email) => {
+    if (!email) return false;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   // Determine if next button should be enabled
   const isNextEnabled = () => {
     switch (currentStep) {
       case STEPS.GEOFENCE:
         return geofence && geofence.length >= 3;
-      case STEPS.PHONE:
-        return phoneNumber && phoneNumber.length >= 10;
+      case STEPS.EMAIL:
+        // At least one valid email (user or coast guard) is required
+        return isValidEmail(userEmail) || isValidEmail(coastGuardEmail);
       default:
         return false;
     }
@@ -68,11 +76,11 @@ const WizardFlow = ({ onSetupComplete }) => {
           
           <div className="flex flex-col items-center">
             <div className={`w-8 h-8 flex items-center justify-center rounded-full ${
-              currentStep >= STEPS.PHONE ? 'bg-accentCyan' : 'bg-border'
+              currentStep >= STEPS.EMAIL ? 'bg-accentCyan' : 'bg-border'
             }`}>
               2
             </div>
-            <span className="mt-2 text-sm">Contact</span>
+            <span className="mt-2 text-sm">Email Alerts</span>
           </div>
         </div>
       </div>
@@ -80,7 +88,7 @@ const WizardFlow = ({ onSetupComplete }) => {
       {/* Step content */}
       <div className="mb-8">
         {currentStep === STEPS.GEOFENCE && <GeofenceStep />}
-        {currentStep === STEPS.PHONE && <PhoneNumberStep />}
+        {currentStep === STEPS.EMAIL && <EmailStep />}
       </div>
       
       {/* Navigation buttons */}
@@ -101,7 +109,7 @@ const WizardFlow = ({ onSetupComplete }) => {
           onClick={handleNext}
           disabled={!isNextEnabled()}
         >
-          {currentStep === STEPS.PHONE ? 'Complete Setup' : 'Next'}
+          {currentStep === STEPS.EMAIL ? 'Complete Setup' : 'Next'}
         </button>
       </div>
     </div>

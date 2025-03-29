@@ -57,16 +57,33 @@ function generateAgentContext() {
   const shutoffList = data.anomalies.aisShutoffs.map(s => 
     `MMSI: ${s.mmsi}, Last seen: ${new Date(s.lastSeen).toLocaleString()}, Last location: ${s.lat}, ${s.lon}`
   ).join('\n');
+
+  // DC Area port information - fictitious but realistic data for context
+  const dcAreaPorts = [
+    { name: "Port of Baltimore", status: "Active", vesselCount: 12, cargoTypes: ["Container", "Bulk", "RoRo"] },
+    { name: "Alexandria Terminal", status: "Active", vesselCount: 3, cargoTypes: ["Break bulk", "Small container"] },
+    { name: "Washington Navy Yard", status: "Restricted", vesselCount: 2, cargoTypes: ["Military", "Support"] },
+    { name: "National Harbor", status: "Active", vesselCount: 1, cargoTypes: ["Passenger", "Tourism"] },
+    { name: "Port of Washington", status: "Active", vesselCount: 2, cargoTypes: ["Mixed use", "Government"] }
+  ];
+
+  // Format DC Area port information
+  const portList = dcAreaPorts.map(p => 
+    `${p.name}: Status - ${p.status}, Vessels - ${p.vesselCount}, Cargo Types - ${p.cargoTypes.join(", ")}`
+  ).join('\n');
   
   // Create the context with all data
   return `
-CURRENT MARITIME SITUATION (as of ${new Date().toLocaleString()})
+CURRENT WASHINGTON DC AREA MARITIME SITUATION (as of ${new Date().toLocaleString()})
 ---
-Total vessels in monitored zone: ${vesselCount}
-Route deviations detected: ${deviationCount} 
-AIS signal losses: ${shutoffCount}
+Total vessels in DC area monitored zone: ${vesselCount}
+Route deviations detected in Potomac/Chesapeake approach: ${deviationCount} 
+AIS signal losses near capital region: ${shutoffCount}
 
-VESSEL LIST:
+DC AREA PORT STATUS:
+${portList}
+
+VESSEL LIST (EASTERN SEABOARD FOCUS):
 ${vesselList || 'No vessels currently in zone.'}
 
 ROUTE DEVIATIONS:
@@ -74,25 +91,37 @@ ${deviationList || 'No route deviations detected.'}
 
 AIS SHUTOFFS:
 ${shutoffList || 'No AIS shutoffs detected.'}
+
+REGIONAL NOTES:
+- Chesapeake Bay is experiencing moderate vessel traffic typical for the season
+- Port of Baltimore operations continuing at normal capacity
+- Military vessel movements observed near Naval Support Facility Indian Head
+- Regular security patrols active around key DC area maritime infrastructure
 ---
 `;
 }
 
 // System prompt for the AI agent
 const SYSTEM_PROMPT = `
-You are MartinAI, a Maritime Threat Detection Assistant. You analyze vessel data and AIS (Automatic Identification System) information to detect anomalies and potential threats.
+You are MartinAI, a Maritime Threat Detection Assistant specializing in the Washington DC area, Chesapeake Bay, and the eastern seaboard. You analyze vessel data and AIS (Automatic Identification System) information to detect anomalies and potential threats in this region.
 
-Using the provided maritime data, you can:
-1. Summarize the current situation in the monitored zone
-2. Provide details about specific vessels (by MMSI number)
-3. Explain anomalies like route deviations or AIS signal shutoffs
-4. Answer questions about vessels' positions, speeds, and behaviors
+Your expertise covers:
+1. The historical and strategic importance of the Port of Baltimore, Alexandria Terminal, Washington Navy Yard, and other maritime facilities in the DC area
+2. Comprehensive vessel tracking along the entire eastern seaboard with focus on traffic entering the Chesapeake Bay
+3. Deep understanding of maritime security concerns specific to the nation's capital and surrounding waterways
+4. Knowledge of commercial and military vessel operations in the Potomac River and Chesapeake Bay
+5. Analysis of nautical patterns and route planning for vessels approaching Washington DC
 
-When asked about vessel information, always provide the most recent data available.
-If asked to explain anomalies, prioritize AIS shutoffs and major route deviations.
-If the user requests information not available in the current data, politely explain that the information is not available.
+When responding to questions:
+- Provide substantial detail and context about the DC area maritime environment
+- Include historical background where relevant to vessel movements or port operations
+- Analyze data with consideration of the unique security needs of the capital region
+- Explain anomalies thoroughly, considering geopolitical implications for the DC area
+- Structure responses into multiple detailed paragraphs (minimum 3-4 paragraphs)
 
-IMPORTANT: Your responses should be concise, focused on maritime security, and professional in tone.
+If your answer would become excessively long, provide a thorough initial response then ask if the user would like additional details on any specific aspect.
+
+Always end your responses with a question about what specific aspect of Washington DC area maritime operations the user would like to explore further.
 `;
 
 // Chat with the agent

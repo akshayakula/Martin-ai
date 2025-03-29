@@ -21,9 +21,13 @@ export const GeofenceProvider = ({ children }) => {
     return savedGeofence ? JSON.parse(savedGeofence) : defaultGeofence;
   });
   
-  // Initialize phone number from localStorage
-  const [phoneNumber, setPhoneNumber] = useState(() => {
-    return localStorage.getItem('phoneNumber') || '';
+  // Initialize email addresses from localStorage
+  const [userEmail, setUserEmail] = useState(() => {
+    return localStorage.getItem('userEmail') || '';
+  });
+  
+  const [coastGuardEmail, setCoastGuardEmail] = useState(() => {
+    return localStorage.getItem('coastGuardEmail') || '';
   });
   
   // Save to localStorage when values change
@@ -32,10 +36,16 @@ export const GeofenceProvider = ({ children }) => {
   }, [geofence]);
   
   useEffect(() => {
-    if (phoneNumber) {
-      localStorage.setItem('phoneNumber', phoneNumber);
+    if (userEmail) {
+      localStorage.setItem('userEmail', userEmail);
     }
-  }, [phoneNumber]);
+  }, [userEmail]);
+  
+  useEffect(() => {
+    if (coastGuardEmail) {
+      localStorage.setItem('coastGuardEmail', coastGuardEmail);
+    }
+  }, [coastGuardEmail]);
   
   // Check if using default geofence
   const isDefaultGeofence = () => {
@@ -62,8 +72,10 @@ export const GeofenceProvider = ({ children }) => {
       defaultGeofence,
       isDefaultGeofence,
       resetGeofence,
-      phoneNumber,
-      setPhoneNumber
+      userEmail,
+      setUserEmail,
+      coastGuardEmail,
+      setCoastGuardEmail
     }}>
       {children}
     </GeofenceContext.Provider>

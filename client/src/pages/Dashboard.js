@@ -10,6 +10,10 @@ import L from 'leaflet';
 import { useGeofence } from '../wizard/GeofenceContext';
 import ChatPanel from '../components/ChatPanel';
 import VesselTracker from '../components/VesselTracker';
+import EasternSeaboardVessels from '../components/EasternSeaboardVessels';
+import DCAreaPorts from '../components/DCAreaPorts';
+import DCAreaGeofence from '../components/DCAreaGeofence';
+import MockScenarios from '../components/MockScenarios';
 
 // Custom vessel icon
 const vesselIcon = new L.DivIcon({
@@ -28,7 +32,7 @@ const shutoffIcon = new L.DivIcon({
 });
 
 const Dashboard = () => {
-  const { geofence, phoneNumber } = useGeofence();
+  const { geofence, userEmail } = useGeofence();
   const [vessels, setVessels] = useState([]);
   const [anomalies, setAnomalies] = useState({ routeDeviations: [], aisShutoffs: [] });
   const [loading, setLoading] = useState(true);
@@ -36,11 +40,16 @@ const Dashboard = () => {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [activeTab, setActiveTab] = useState('overview'); // Default to overview tab
   
-  // Center on the middle of the geofence
-  const center = geofence.reduce(
-    (acc, coord) => [acc[0] + coord[0] / geofence.length, acc[1] + coord[1] / geofence.length],
-    [0, 0]
-  );
+  // Default center for Washington DC area
+  const defaultCenter = [38.9072, -77.0369];
+  
+  // Center on the middle of the geofence, with fallback to default center
+  const center = geofence && geofence.length > 0
+    ? geofence.reduce(
+        (acc, coord) => [acc[0] + coord[0] / geofence.length, acc[1] + coord[1] / geofence.length],
+        [0, 0]
+      )
+    : defaultCenter;
 
   // Fetch vessel data
   const fetchVesselData = async () => {
@@ -51,13 +60,29 @@ const Dashboard = () => {
       const response = await fetch('http://localhost:5050/api/vessels');
       const data = await response.json();
       
-      setVessels(data.vessels);
+      // Add safeguards - filter out vessels with invalid coordinates and limit to 10
+      const validVessels = data.vessels
+        .filter(vessel => vessel.lat != null && vessel.lon != null && 
+                         !isNaN(vessel.lat) && !isNaN(vessel.lon))
+        .slice(0, 10); // Limit to 10 vessels
+      
+      setVessels(validVessels);
       
       // Fetch anomalies data
       const anomaliesResponse = await fetch('http://localhost:5050/api/vessels/anomalies');
       const anomaliesData = await anomaliesResponse.json();
       
-      setAnomalies(anomaliesData.anomalies);
+      // Filter anomalies with valid coordinates
+      const validAnomalies = {
+        routeDeviations: anomaliesData.anomalies.routeDeviations
+          .filter(vessel => vessel.lat != null && vessel.lon != null && 
+                           !isNaN(vessel.lat) && !isNaN(vessel.lon)),
+        aisShutoffs: anomaliesData.anomalies.aisShutoffs
+          .filter(vessel => vessel.lat != null && vessel.lon != null && 
+                           !isNaN(vessel.lat) && !isNaN(vessel.lon))
+      };
+      
+      setAnomalies(validAnomalies);
       setLastUpdate(data.lastUpdated);
       setError(null);
     } catch (err) {
@@ -83,12 +108,30 @@ const Dashboard = () => {
       {/* Left Panel - Map and Stats */}
       <div className="lg:col-span-2 flex flex-col gap-6">
         {/* Tab Navigation */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border overflow-x-auto whitespace-nowrap">
           <button
             className={`py-2 px-4 font-medium ${activeTab === 'overview' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
             onClick={() => setActiveTab('overview')}
           >
             Overview
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === 'eastern-seaboard' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
+            onClick={() => setActiveTab('eastern-seaboard')}
+          >
+            Eastern Seaboard
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === 'dc-area-ports' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
+            onClick={() => setActiveTab('dc-area-ports')}
+          >
+            DC Area Ports
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === 'dc-area-geofence' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
+            onClick={() => setActiveTab('dc-area-geofence')}
+          >
+            DC Geofences
           </button>
           <button
             className={`py-2 px-4 font-medium ${activeTab === 'vessel-tracker' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
@@ -102,7 +145,7 @@ const Dashboard = () => {
         {activeTab === 'overview' ? (
           // Overview Tab
           <div className="card">
-            <h2 className="text-xl font-bold mb-4">Maritime Monitoring</h2>
+            <h2 className="text-xl font-bold mb-4">Washington DC Area Maritime Monitoring</h2>
             
             <div className="h-[500px] relative">
               <MapContainer 
@@ -130,45 +173,49 @@ const Dashboard = () => {
                 
                 {/* Vessel Markers */}
                 {vessels.map(vessel => (
-                  <Marker
-                    key={vessel.mmsi}
-                    position={[vessel.lat, vessel.lon]}
-                    icon={vesselIcon}
-                  >
-                    <Popup>
-                      <div>
-                        <h3 className="font-bold">Vessel {vessel.mmsi}</h3>
-                        <p>Speed: {vessel.speed} knots</p>
-                        <p>Course: {vessel.course}°</p>
-                        <p>Destination: {vessel.destination || 'Unknown'}</p>
-                        {anomalies.routeDeviations.find(d => d.mmsi === vessel.mmsi) && (
-                          <p className="text-alertRed font-bold mt-2">
-                            Route deviation detected
-                          </p>
-                        )}
-                      </div>
-                    </Popup>
-                  </Marker>
+                  vessel.lat != null && vessel.lon != null && !isNaN(vessel.lat) && !isNaN(vessel.lon) ? (
+                    <Marker
+                      key={vessel.mmsi}
+                      position={[vessel.lat, vessel.lon]}
+                      icon={vesselIcon}
+                    >
+                      <Popup>
+                        <div>
+                          <h3 className="font-bold">Vessel {vessel.mmsi}</h3>
+                          <p>Speed: {vessel.speed} knots</p>
+                          <p>Course: {vessel.course}°</p>
+                          <p>Destination: {vessel.destination || 'Unknown'}</p>
+                          {anomalies.routeDeviations.find(d => d.mmsi === vessel.mmsi) && (
+                            <p className="text-alertRed font-bold mt-2">
+                              Route deviation detected
+                            </p>
+                          )}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ) : null
                 ))}
                 
                 {/* AIS Shutoff Markers */}
                 {anomalies.aisShutoffs.map(vessel => (
-                  <Marker
-                    key={vessel.mmsi}
-                    position={[vessel.lat, vessel.lon]}
-                    icon={shutoffIcon}
-                  >
-                    <Popup>
-                      <div>
-                        <h3 className="font-bold">AIS Signal Loss</h3>
-                        <p>Vessel {vessel.mmsi}</p>
-                        <p>Last seen: {new Date(vessel.lastSeen).toLocaleTimeString()}</p>
-                        <p className="text-alertRed font-bold mt-2">
-                          Signal lost
-                        </p>
-                      </div>
-                    </Popup>
-                  </Marker>
+                  vessel.lat != null && vessel.lon != null && !isNaN(vessel.lat) && !isNaN(vessel.lon) ? (
+                    <Marker
+                      key={vessel.mmsi}
+                      position={[vessel.lat, vessel.lon]}
+                      icon={shutoffIcon}
+                    >
+                      <Popup>
+                        <div>
+                          <h3 className="font-bold">AIS Signal Loss</h3>
+                          <p>Vessel {vessel.mmsi}</p>
+                          <p>Last seen: {new Date(vessel.lastSeen).toLocaleTimeString()}</p>
+                          <p className="text-alertRed font-bold mt-2">
+                            Signal lost
+                          </p>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  ) : null
                 ))}
               </MapContainer>
               
@@ -208,6 +255,21 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+        ) : activeTab === 'eastern-seaboard' ? (
+          // Eastern Seaboard Vessels Tab
+          <div className="card">
+            <EasternSeaboardVessels />
+          </div>
+        ) : activeTab === 'dc-area-ports' ? (
+          // DC Area Ports Tab  
+          <div className="card">
+            <DCAreaPorts />
+          </div>
+        ) : activeTab === 'dc-area-geofence' ? (
+          // DC Area Geofence Tab
+          <div className="card">
+            <DCAreaGeofence />
+          </div>
         ) : (
           // Vessel Tracker Tab
           <div className="card">
@@ -217,10 +279,17 @@ const Dashboard = () => {
         )}
       </div>
       
-      {/* Right Panel - Chat Interface */}
-      <div className="card h-[600px] flex flex-col">
-        <h2 className="text-xl font-bold mb-4">AI Agent Interface</h2>
-        <ChatPanel />
+      {/* Right Panel - Chat and Controls */}
+      <div className="flex flex-col gap-6">
+        {/* Maritime Safety Officer Controls */}
+        <div className="card">
+          <MockScenarios />
+        </div>
+        
+        {/* AI Agent Chat */}
+        <div className="card flex-1">
+          <ChatPanel />
+        </div>
       </div>
     </div>
   );

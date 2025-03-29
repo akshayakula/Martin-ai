@@ -17,11 +17,11 @@ function App() {
     setSetupComplete(true);
   };
 
-  // Handler for resetting setup
-  const handleResetSetup = () => {
-    localStorage.removeItem('setupComplete');
+  // Reset the setup wizard by clearing localStorage
+  const resetSetup = () => {
     localStorage.removeItem('geofence');
-    localStorage.removeItem('phoneNumber');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('coastGuardEmail');
     setSetupComplete(false);
   };
 
@@ -29,7 +29,7 @@ function App() {
     <Router>
       <GeofenceProvider>
         <div className="min-h-screen flex flex-col bg-background text-text">
-          <Header onResetSetup={handleResetSetup} />
+          <Header onResetSetup={resetSetup} />
           <main className="flex-grow container mx-auto px-4 py-6">
             <Routes>
               <Route 
