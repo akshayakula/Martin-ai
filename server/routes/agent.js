@@ -3,6 +3,7 @@ const router = express.Router();
 const { OpenAI } = require('openai');
 const datalasticService = require('../services/datalastic');
 const anomalyService = require('../services/anomaly');
+const intelligentAgent = require('../ai/intelligentAgent');
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -11,21 +12,27 @@ const openai = new OpenAI({
 
 // Get data for the agent to use
 function getAgentData() {
-  // This would normally be retrieved from the vessels route,
-  // but for the MVP we'll just reuse the services directly
-  
-  // Get vessels in geofence
-  const { vessels } = datalasticService.getUSVessels();
-  const vesselsInGeofence = anomalyService.filterVesselsByGeofence(vessels);
-  
-  // Get anomalies
-  const anomalies = anomalyService.getAllAnomalies(vesselsInGeofence, []);
-  
-  return {
-    vessels: vesselsInGeofence,
-    anomalies,
-    timestamp: new Date().toISOString()
-  };
+  try {
+    // Get vessels in geofence
+    const { vessels = [] } = datalasticService.getUSVessels() || { vessels: [] };
+    const vesselsInGeofence = vessels.length > 0 ? anomalyService.filterVesselsByGeofence(vessels) : [];
+    
+    // Get anomalies
+    const anomalies = anomalyService.getAllAnomalies(vesselsInGeofence, []);
+    
+    return {
+      vessels: vesselsInGeofence,
+      anomalies,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Error getting agent data:', error);
+    return {
+      vessels: [],
+      anomalies: { routeDeviations: [], aisShutoffs: [] },
+      timestamp: new Date().toISOString()
+    };
+  }
 }
 
 // Function to generate context for the AI from current data
@@ -97,31 +104,76 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
     
-    // Generate up-to-date context
-    const context = generateAgentContext();
+    // Check if we should handle this as a complex query
+    const isComplex = message.includes('and') || 
+                      message.includes(',') || 
+                      message.toLowerCase().includes('compare') || 
+                      message.toLowerCase().includes('between') ||
+                      message.toLowerCase().includes('analyze');
     
-    // Call OpenAI API
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "system", content: context },
-        { role: "user", content: message }
-      ],
-      temperature: 0.7,
-      max_tokens: 500
-    });
+    let agentResponse;
     
-    // Extract and return the response
-    const reply = completion.choices[0].message.content;
+    if (isComplex) {
+      // Use the intelligent agent's complex query processor for queries that might need multiple API calls
+      console.log('Processing as complex query:', message);
+      agentResponse = await intelligentAgent.processComplexQuery(message);
+    } else {
+      // Use the standard intelligent agent for simpler queries
+      console.log('Processing as standard query:', message);
+      agentResponse = await intelligentAgent.processMessage(message);
+    }
     
+    // Check if there was an error with the intelligent agent
+    if (agentResponse.error) {
+      // Fallback to the simple agent if there was an error with the intelligent agent
+      console.log('Falling back to simple agent due to error');
+      const context = generateAgentContext();
+      
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: context },
+          { role: "user", content: message }
+        ],
+        temperature: 0.7,
+        max_tokens: 500
+      });
+      
+      // Return simple agent response
+      return res.json({
+        reply: completion.choices[0].message.content,
+        timestamp: new Date().toISOString(),
+        usingFallback: true
+      });
+    }
+    
+    // Return intelligent agent response
     res.json({
-      reply,
-      timestamp: new Date().toISOString()
+      reply: agentResponse.reply,
+      timestamp: new Date().toISOString(),
+      functionCalled: agentResponse.functionCalled,
+      isComplexQuery: agentResponse.isComplexQuery || false,
+      usingFallback: false
     });
+    
   } catch (error) {
     console.error('Agent chat error:', error);
     res.status(500).json({ error: 'An error occurred while processing your request' });
+  }
+});
+
+// Get available Datalastic endpoints
+router.get('/endpoints', (req, res) => {
+  try {
+    const endpoints = datalasticService.getAvailableEndpoints();
+    res.json({
+      endpoints,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching endpoints:', error);
+    res.status(500).json({ error: 'An error occurred while fetching endpoints' });
   }
 });
 

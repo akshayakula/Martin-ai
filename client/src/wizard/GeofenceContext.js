@@ -1,11 +1,12 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 
-// Default geofence around Washington DC area
+// Default geofence - massively expanded to cover eastern shore
 const defaultGeofence = [
-  [38.7916, -77.1198],
-  [38.9955, -77.0417],
-  [38.9207, -76.9094],
-  [38.7916, -77.1198]
+  [37.5000, -78.5000], // Southwest point - far inland Virginia
+  [40.5000, -77.5000], // Northwest point - central Pennsylvania 
+  [40.5000, -74.5000], // Northeast point - New Jersey coast
+  [37.0000, -75.0000], // Southeast point - Virginia Beach/Norfolk
+  [37.5000, -78.5000]  // Close the polygon
 ];
 
 // Create the context

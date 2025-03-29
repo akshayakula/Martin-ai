@@ -31,7 +31,7 @@ Create `.env` files in both client and server directories with the following var
 
 **Client (.env)**
 ```
-REACT_APP_API_URL=http://localhost:5000
+REACT_APP_API_URL=http://localhost:5050
 REACT_APP_DATALASTIC_API_URL=https://api.datalastic.com/api/v0
 ```
 

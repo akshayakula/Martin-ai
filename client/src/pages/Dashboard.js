@@ -9,6 +9,7 @@ import {
 import L from 'leaflet';
 import { useGeofence } from '../wizard/GeofenceContext';
 import ChatPanel from '../components/ChatPanel';
+import VesselTracker from '../components/VesselTracker';
 
 // Custom vessel icon
 const vesselIcon = new L.DivIcon({
@@ -33,6 +34,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview'); // Default to overview tab
   
   // Center on the middle of the geofence
   const center = geofence.reduce(
@@ -45,45 +47,18 @@ const Dashboard = () => {
     try {
       setLoading(true);
       
-      // For the MVP, we'll use mock data
-      // In a real application, this would be:
-      // const response = await fetch('http://localhost:5000/api/vessels');
-      // const data = await response.json();
+      // Call the actual API endpoint
+      const response = await fetch('http://localhost:5050/api/vessels');
+      const data = await response.json();
       
-      // Mock data for demonstration
-      const mockData = {
-        vessels: [
-          { mmsi: '123456789', lat: 38.89, lon: -77.03, speed: 7.5, course: 120, destination: 'PORT WASHINGTON' },
-          { mmsi: '987654321', lat: 38.85, lon: -77.01, speed: 0, course: 0, destination: 'ALEXANDRIA' },
-          { mmsi: '567891234', lat: 38.92, lon: -77.05, speed: 12, course: 260, destination: 'NAVAL YARD' }
-        ],
-        anomalies: {
-          routeDeviations: [
-            { 
-              mmsi: '123456789', 
-              lat: 38.89, 
-              lon: -77.03, 
-              deviationInfo: { 
-                distanceNm: 3.4, 
-                hasDeviated: true 
-              } 
-            }
-          ],
-          aisShutoffs: [
-            { 
-              mmsi: '456123789', 
-              lat: 38.88, 
-              lon: -77.04, 
-              lastSeen: Date.now() - 1000 * 60 * 15 // 15 minutes ago
-            }
-          ]
-        },
-        lastUpdated: new Date().toISOString()
-      };
+      setVessels(data.vessels);
       
-      setVessels(mockData.vessels);
-      setAnomalies(mockData.anomalies);
-      setLastUpdate(mockData.lastUpdated);
+      // Fetch anomalies data
+      const anomaliesResponse = await fetch('http://localhost:5050/api/vessels/anomalies');
+      const anomaliesData = await anomaliesResponse.json();
+      
+      setAnomalies(anomaliesData.anomalies);
+      setLastUpdate(data.lastUpdated);
       setError(null);
     } catch (err) {
       console.error('Error fetching vessel data:', err);
@@ -105,116 +80,144 @@ const Dashboard = () => {
   
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Map Panel */}
-      <div className="lg:col-span-2 card">
-        <h2 className="text-xl font-bold mb-4">Maritime Monitoring</h2>
-        
-        <div className="h-[500px] relative">
-          <MapContainer 
-            center={center} 
-            zoom={11} 
-            className="h-full w-full rounded-lg"
+      {/* Left Panel - Map and Stats */}
+      <div className="lg:col-span-2 flex flex-col gap-6">
+        {/* Tab Navigation */}
+        <div className="flex border-b border-border">
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === 'overview' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
+            onClick={() => setActiveTab('overview')}
           >
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            
-            {/* Geofence Polygon */}
-            {geofence?.length > 2 && (
-              <Polygon 
-                positions={geofence} 
-                pathOptions={{ 
-                  color: '#00E0D5', 
-                  fillColor: '#00E0D5',
-                  weight: 2,
-                  fillOpacity: 0.1 
-                }} 
-              />
-            )}
-            
-            {/* Vessel Markers */}
-            {vessels.map(vessel => (
-              <Marker
-                key={vessel.mmsi}
-                position={[vessel.lat, vessel.lon]}
-                icon={vesselIcon}
-              >
-                <Popup>
-                  <div>
-                    <h3 className="font-bold">Vessel {vessel.mmsi}</h3>
-                    <p>Speed: {vessel.speed} knots</p>
-                    <p>Course: {vessel.course}°</p>
-                    <p>Destination: {vessel.destination || 'Unknown'}</p>
-                    {anomalies.routeDeviations.find(d => d.mmsi === vessel.mmsi) && (
-                      <p className="text-alertRed font-bold mt-2">
-                        Route deviation detected
-                      </p>
-                    )}
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-            
-            {/* AIS Shutoff Markers */}
-            {anomalies.aisShutoffs.map(vessel => (
-              <Marker
-                key={vessel.mmsi}
-                position={[vessel.lat, vessel.lon]}
-                icon={shutoffIcon}
-              >
-                <Popup>
-                  <div>
-                    <h3 className="font-bold">AIS Signal Loss</h3>
-                    <p>Vessel {vessel.mmsi}</p>
-                    <p>Last seen: {new Date(vessel.lastSeen).toLocaleTimeString()}</p>
-                    <p className="text-alertRed font-bold mt-2">
-                      Signal lost
-                    </p>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
-          </MapContainer>
-          
-          {/* Status Overlay */}
-          <div className="absolute bottom-4 left-4 bg-card bg-opacity-90 p-3 rounded-md border border-border">
-            <p className="text-sm">
-              <span className="font-medium">Status:</span>{' '}
-              {loading ? 'Updating...' : 'Active'}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Vessels in zone:</span>{' '}
-              {vessels.length}
-            </p>
-            <p className="text-sm">
-              <span className="font-medium">Anomalies:</span>{' '}
-              {anomalies.routeDeviations.length + anomalies.aisShutoffs.length}
-            </p>
-            <p className="text-xs text-textSecondary mt-1">
-              Last update: {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : '-'}
-            </p>
-          </div>
+            Overview
+          </button>
+          <button
+            className={`py-2 px-4 font-medium ${activeTab === 'vessel-tracker' ? 'text-accentBlue border-b-2 border-accentBlue' : 'text-textSecondary hover:text-text'}`}
+            onClick={() => setActiveTab('vessel-tracker')}
+          >
+            Vessel Tracker
+          </button>
         </div>
         
-        {/* Stats Summary */}
-        <div className="grid grid-cols-3 gap-4 mt-6">
-          <div className="bg-border bg-opacity-20 p-4 rounded-md">
-            <h3 className="text-sm text-textSecondary mb-1">Vessels Monitored</h3>
-            <p className="text-2xl font-bold">{vessels.length}</p>
+        {/* Tab Content */}
+        {activeTab === 'overview' ? (
+          // Overview Tab
+          <div className="card">
+            <h2 className="text-xl font-bold mb-4">Maritime Monitoring</h2>
+            
+            <div className="h-[500px] relative">
+              <MapContainer 
+                center={center} 
+                zoom={11} 
+                className="h-full w-full rounded-lg"
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                
+                {/* Geofence Polygon */}
+                {geofence?.length > 2 && (
+                  <Polygon 
+                    positions={geofence} 
+                    pathOptions={{ 
+                      color: '#00E0D5', 
+                      fillColor: '#00E0D5',
+                      weight: 2,
+                      fillOpacity: 0.1 
+                    }} 
+                  />
+                )}
+                
+                {/* Vessel Markers */}
+                {vessels.map(vessel => (
+                  <Marker
+                    key={vessel.mmsi}
+                    position={[vessel.lat, vessel.lon]}
+                    icon={vesselIcon}
+                  >
+                    <Popup>
+                      <div>
+                        <h3 className="font-bold">Vessel {vessel.mmsi}</h3>
+                        <p>Speed: {vessel.speed} knots</p>
+                        <p>Course: {vessel.course}°</p>
+                        <p>Destination: {vessel.destination || 'Unknown'}</p>
+                        {anomalies.routeDeviations.find(d => d.mmsi === vessel.mmsi) && (
+                          <p className="text-alertRed font-bold mt-2">
+                            Route deviation detected
+                          </p>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+                
+                {/* AIS Shutoff Markers */}
+                {anomalies.aisShutoffs.map(vessel => (
+                  <Marker
+                    key={vessel.mmsi}
+                    position={[vessel.lat, vessel.lon]}
+                    icon={shutoffIcon}
+                  >
+                    <Popup>
+                      <div>
+                        <h3 className="font-bold">AIS Signal Loss</h3>
+                        <p>Vessel {vessel.mmsi}</p>
+                        <p>Last seen: {new Date(vessel.lastSeen).toLocaleTimeString()}</p>
+                        <p className="text-alertRed font-bold mt-2">
+                          Signal lost
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+              
+              {/* Status Overlay */}
+              <div className="absolute bottom-4 left-4 bg-card bg-opacity-90 p-3 rounded-md border border-border">
+                <p className="text-sm">
+                  <span className="font-medium">Status:</span>{' '}
+                  {loading ? 'Updating...' : 'Active'}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Vessels in zone:</span>{' '}
+                  {vessels.length}
+                </p>
+                <p className="text-sm">
+                  <span className="font-medium">Anomalies:</span>{' '}
+                  {anomalies.routeDeviations.length + anomalies.aisShutoffs.length}
+                </p>
+                <p className="text-xs text-textSecondary mt-1">
+                  Last update: {lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : '-'}
+                </p>
+              </div>
+            </div>
+            
+            {/* Stats Summary */}
+            <div className="grid grid-cols-3 gap-4 mt-6">
+              <div className="bg-border bg-opacity-20 p-4 rounded-md">
+                <h3 className="text-sm text-textSecondary mb-1">Vessels Monitored</h3>
+                <p className="text-2xl font-bold">{vessels.length}</p>
+              </div>
+              <div className="bg-border bg-opacity-20 p-4 rounded-md">
+                <h3 className="text-sm text-textSecondary mb-1">Route Deviations</h3>
+                <p className="text-2xl font-bold text-accentPurple">{anomalies.routeDeviations.length}</p>
+              </div>
+              <div className="bg-border bg-opacity-20 p-4 rounded-md">
+                <h3 className="text-sm text-textSecondary mb-1">AIS Shutoffs</h3>
+                <p className="text-2xl font-bold text-alertRed">{anomalies.aisShutoffs.length}</p>
+              </div>
+            </div>
           </div>
-          <div className="bg-border bg-opacity-20 p-4 rounded-md">
-            <h3 className="text-sm text-textSecondary mb-1">Route Deviations</h3>
-            <p className="text-2xl font-bold text-accentPurple">{anomalies.routeDeviations.length}</p>
+        ) : (
+          // Vessel Tracker Tab
+          <div className="card">
+            <h2 className="text-xl font-bold mb-4">Detailed Vessel Tracking</h2>
+            <VesselTracker />
           </div>
-          <div className="bg-border bg-opacity-20 p-4 rounded-md">
-            <h3 className="text-sm text-textSecondary mb-1">AIS Shutoffs</h3>
-            <p className="text-2xl font-bold text-alertRed">{anomalies.aisShutoffs.length}</p>
-          </div>
-        </div>
+        )}
       </div>
       
-      {/* Chat Panel */}
+      {/* Right Panel - Chat Interface */}
       <div className="card h-[600px] flex flex-col">
         <h2 className="text-xl font-bold mb-4">AI Agent Interface</h2>
         <ChatPanel />
