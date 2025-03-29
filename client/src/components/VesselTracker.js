@@ -6,18 +6,73 @@ const VesselTracker = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [trackedVessels, setTrackedVessels] = useState([]);
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Fetch all currently tracked vessels
   const fetchTrackedVessels = async () => {
     try {
+      setIsUpdating(true);
       const response = await fetch('http://localhost:5050/api/vessels/track');
       const data = await response.json();
       
       if (data.success) {
-        setTrackedVessels(Object.values(data.vessels));
+        // Process vessels from new format - handle nested data structure
+        const processedVessels = Object.entries(data.vessels || {}).map(([mmsi, vesselInfo]) => {
+          // Access vessel data which may be nested within a data property
+          const vesselData = vesselInfo.data || vesselInfo;
+          
+          return {
+            mmsi: vesselData.mmsi || mmsi,
+            vessel_name: vesselData.name,
+            lat: vesselData.lat,
+            lon: vesselData.lon,
+            speed: vesselData.speed,
+            course: vesselData.course,
+            heading: vesselData.heading,
+            destination: vesselData.destination,
+            vessel_type: vesselData.type || vesselData.type_specific,
+            country: vesselData.country_iso,
+            navigation_status: vesselData.navigation_status,
+            lastUpdated: vesselInfo.lastUpdated || new Date().toISOString()
+          };
+        });
+        
+        setTrackedVessels(processedVessels);
+        setLastUpdated(new Date());
+        
+        // If we're currently viewing a vessel, update its data too
+        if (trackedVessel) {
+          const trackedResponse = await fetch(`http://localhost:5050/api/vessels/track/${trackedVessel.mmsi}`);
+          const trackedData = await trackedResponse.json();
+          if (trackedData.success) {
+            // Process the individual vessel data
+            const vesselInfo = trackedData.vessel;
+            const vesselData = vesselInfo.data || vesselInfo;
+            
+            const processedVessel = {
+              mmsi: vesselData.mmsi || trackedVessel.mmsi,
+              vessel_name: vesselData.name,
+              lat: vesselData.lat,
+              lon: vesselData.lon,
+              speed: vesselData.speed,
+              course: vesselData.course,
+              heading: vesselData.heading,
+              destination: vesselData.destination,
+              vessel_type: vesselData.type || vesselData.type_specific,
+              country: vesselData.country_iso,
+              navigation_status: vesselData.navigation_status,
+              lastUpdated: vesselInfo.lastUpdated || new Date().toISOString()
+            };
+            
+            setTrackedVessel(processedVessel);
+          }
+        }
       }
     } catch (error) {
       console.error('Error fetching tracked vessels:', error);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -25,8 +80,8 @@ const VesselTracker = () => {
   useEffect(() => {
     fetchTrackedVessels();
     
-    // Poll tracked vessels every 30 seconds
-    const interval = setInterval(fetchTrackedVessels, 30000);
+    // Poll tracked vessels every 10 seconds
+    const interval = setInterval(fetchTrackedVessels, 10000);
     
     return () => clearInterval(interval);
   }, []);
@@ -55,7 +110,26 @@ const VesselTracker = () => {
       const data = await response.json();
       
       if (data.success) {
-        setTrackedVessel(data.vessel);
+        // Process the vessel data
+        const vesselInfo = data.vessel;
+        const vesselData = vesselInfo.data || vesselInfo;
+        
+        const processedVessel = {
+          mmsi: vesselData.mmsi || mmsi.trim(),
+          vessel_name: vesselData.name,
+          lat: vesselData.lat,
+          lon: vesselData.lon,
+          speed: vesselData.speed,
+          course: vesselData.course,
+          heading: vesselData.heading,
+          destination: vesselData.destination,
+          vessel_type: vesselData.type || vesselData.type_specific,
+          country: vesselData.country_iso,
+          navigation_status: vesselData.navigation_status,
+          lastUpdated: vesselInfo.lastUpdated || new Date().toISOString()
+        };
+        
+        setTrackedVessel(processedVessel);
         // Refresh the list of tracked vessels
         fetchTrackedVessels();
         // Clear input
@@ -93,21 +167,61 @@ const VesselTracker = () => {
   // View details of a tracked vessel
   const handleViewVessel = async (mmsiToView) => {
     try {
+      setLoading(true);
       const response = await fetch(`http://localhost:5050/api/vessels/track/${mmsiToView}`);
       const data = await response.json();
       
       if (data.success) {
-        setTrackedVessel(data.vessel);
+        // Process the individual vessel data
+        const vesselInfo = data.vessel;
+        const vesselData = vesselInfo.data || vesselInfo;
+        
+        const processedVessel = {
+          mmsi: vesselData.mmsi || mmsiToView,
+          vessel_name: vesselData.name,
+          lat: vesselData.lat,
+          lon: vesselData.lon,
+          speed: vesselData.speed,
+          course: vesselData.course,
+          heading: vesselData.heading,
+          destination: vesselData.destination,
+          vessel_type: vesselData.type || vesselData.type_specific,
+          country: vesselData.country_iso,
+          navigation_status: vesselData.navigation_status,
+          lastUpdated: vesselInfo.lastUpdated || new Date().toISOString()
+        };
+        
+        setTrackedVessel(processedVessel);
       }
     } catch (error) {
       console.error('Error viewing vessel details:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="vessel-tracker">
       <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2">Live Vessel Tracking</h3>
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="text-lg font-semibold">Live Vessel Tracking</h3>
+          {isUpdating && (
+            <span className="flex items-center text-xs text-accentBlue">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-accentBlue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Updating
+            </span>
+          )}
+        </div>
+        
+        {lastUpdated && (
+          <p className="text-xs text-textSecondary mb-2">
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
+        )}
+        
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"

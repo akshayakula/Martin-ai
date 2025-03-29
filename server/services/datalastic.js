@@ -238,11 +238,14 @@ async function trackVesselByMMSI(mmsi) {
       
       vesselData.lastUpdated = currentTime;
       
+      // Format vessel data consistently
+      const formattedVessel = formatVesselData(vesselData, mmsi);
+      
       // Update cache
-      trackedVesselsCache[mmsi] = vesselData;
+      trackedVesselsCache[mmsi] = formattedVessel;
       
       return {
-        vessel: vesselData,
+        vessel: formattedVessel,
         success: true
       };
     }
@@ -502,6 +505,57 @@ function getAvailableEndpoints() {
   };
 }
 
+/**
+ * Format vessel data in a consistent structure
+ * @param {Object} vessel - Raw vessel data
+ * @param {string} mmsi - MMSI of the vessel
+ * @returns {Object} Formatted vessel data
+ */
+function formatVesselData(vessel, mmsi) {
+  return {
+    data: {
+      uuid: vessel.uuid || null,
+      name: vessel.name || vessel.vessel_name || 'Unknown',
+      mmsi: vessel.mmsi || mmsi,
+      imo: vessel.imo || null,
+      eni: vessel.eni || null,
+      country_iso: vessel.country_iso || vessel.country || null,
+      type: vessel.type || vessel.vessel_type || null,
+      type_specific: vessel.type_specific || vessel.vessel_type || 'Unspecified',
+      lat: vessel.lat || vessel.latitude || null,
+      lon: vessel.lon || vessel.longitude || null,
+      speed: vessel.speed || 0,
+      course: vessel.course || 0,
+      heading: vessel.heading || null,
+      current_draught: vessel.current_draught || null,
+      navigation_status: vessel.navigation_status || null,
+      destination: vessel.destination || null,
+      dest_port_uuid: vessel.dest_port_uuid || null,
+      dest_port: vessel.dest_port || null,
+      dest_port_unlocode: vessel.dest_port_unlocode || null,
+      dep_port_uuid: vessel.dep_port_uuid || null,
+      dep_port: vessel.dep_port || null,
+      dep_port_unlocode: vessel.dep_port_unlocode || null,
+      last_position_epoch: vessel.last_position_epoch || null,
+      last_position_UTC: vessel.last_position_UTC || null,
+      atd_epoch: vessel.atd_epoch || null,
+      atd_UTC: vessel.atd_UTC || null,
+      eta_epoch: vessel.eta_epoch || null,
+      eta_UTC: vessel.eta_UTC || null,
+      timezone_offset_sec: vessel.timezone_offset_sec || null,
+      timezone: vessel.timezone || null
+    },
+    meta: {
+      duration: 0,
+      endpoint: '/api/v0/vessel_pro',
+      success: true
+    },
+    firstTracked: vessel.firstSeen || Date.now(),
+    lastUpdated: new Date().toISOString(),
+    cached: vessel.cached || false
+  };
+}
+
 module.exports = {
   getUSVessels,
   getAllVessels,
@@ -512,5 +566,6 @@ module.exports = {
   getVesselHistory,
   getPortInfo,
   getVesselsInPort,
-  getAvailableEndpoints
+  getAvailableEndpoints,
+  formatVesselData
 };

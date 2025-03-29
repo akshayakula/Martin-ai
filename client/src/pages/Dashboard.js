@@ -60,13 +60,49 @@ const Dashboard = () => {
       const response = await fetch('http://localhost:5050/api/vessels');
       const data = await response.json();
       
-      // Add safeguards - filter out vessels with invalid coordinates and limit to 10
-      const validVessels = data.vessels
-        .filter(vessel => vessel.lat != null && vessel.lon != null && 
+      if (data.success) {
+        // Handle new format where vessels is an object with MMSI keys
+        // Convert to array for compatibility with existing code
+        const vesselArray = Object.values(data.vessels || {}).map(vessel => {
+          // Access vessel data which is now within a data property
+          const vesselData = vessel.data || vessel;
+          return {
+            mmsi: vesselData.mmsi,
+            name: vesselData.name,
+            lat: vesselData.lat,
+            lon: vesselData.lon,
+            speed: vesselData.speed,
+            course: vesselData.course,
+            heading: vesselData.heading,
+            destination: vesselData.destination,
+            type: vesselData.type,
+            country_iso: vesselData.country_iso,
+            navigation_status: vesselData.navigation_status,
+            lastUpdated: vessel.lastUpdated || new Date().toISOString()
+          };
+        });
+        
+        // Filter vessels with valid coordinates and limit to 10
+        const validVessels = vesselArray
+          .filter(vessel => vessel.lat != null && vessel.lon != null && 
                          !isNaN(vessel.lat) && !isNaN(vessel.lon))
-        .slice(0, 10); // Limit to 10 vessels
-      
-      setVessels(validVessels);
+          .slice(0, 10);
+        
+        setVessels(validVessels);
+        setLastUpdate(data.lastUpdated || new Date().toISOString());
+        setError(null);
+      } else {
+        // Handle old format for backward compatibility
+        // Add safeguards - filter out vessels with invalid coordinates and limit to 10
+        const validVessels = (data.vessels || [])
+          .filter(vessel => vessel.lat != null && vessel.lon != null && 
+                          !isNaN(vessel.lat) && !isNaN(vessel.lon))
+          .slice(0, 10); // Limit to 10 vessels
+        
+        setVessels(validVessels);
+        setLastUpdate(data.lastUpdated);
+        setError(null);
+      }
       
       // Fetch anomalies data
       const anomaliesResponse = await fetch('http://localhost:5050/api/vessels/anomalies');
@@ -83,8 +119,6 @@ const Dashboard = () => {
       };
       
       setAnomalies(validAnomalies);
-      setLastUpdate(data.lastUpdated);
-      setError(null);
     } catch (err) {
       console.error('Error fetching vessel data:', err);
       setError('Failed to fetch vessel data');
@@ -97,8 +131,8 @@ const Dashboard = () => {
   useEffect(() => {
     fetchVesselData();
     
-    // Poll every 30 seconds
-    const interval = setInterval(fetchVesselData, 30000);
+    // Poll every 10 seconds
+    const interval = setInterval(fetchVesselData, 10000);
     
     return () => clearInterval(interval);
   }, []);
@@ -181,7 +215,8 @@ const Dashboard = () => {
                     >
                       <Popup>
                         <div>
-                          <h3 className="font-bold">Vessel {vessel.mmsi}</h3>
+                          <h3 className="font-bold">{vessel.name || `Vessel ${vessel.mmsi}`}</h3>
+                          <p>MMSI: {vessel.mmsi}</p>
                           <p>Speed: {vessel.speed} knots</p>
                           <p>Course: {vessel.course}°</p>
                           <p>Destination: {vessel.destination || 'Unknown'}</p>
@@ -221,10 +256,22 @@ const Dashboard = () => {
               
               {/* Status Overlay */}
               <div className="absolute bottom-4 left-4 bg-card bg-opacity-90 p-3 rounded-md border border-border">
-                <p className="text-sm">
-                  <span className="font-medium">Status:</span>{' '}
-                  {loading ? 'Updating...' : 'Active'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm">
+                    <span className="font-medium">Status:</span>{' '}
+                    {loading ? (
+                      <span className="text-accentBlue flex items-center">
+                        <svg className="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Updating...
+                      </span>
+                    ) : (
+                      <span className="text-accentGreen">Active</span>
+                    )}
+                  </p>
+                </div>
                 <p className="text-sm">
                   <span className="font-medium">Vessels in zone:</span>{' '}
                   {vessels.length}
@@ -286,8 +333,8 @@ const Dashboard = () => {
           <MockScenarios />
         </div>
         
-        {/* AI Agent Chat */}
-        <div className="card flex-1">
+        {/* AI Agent Chat - Now below MockScenarios in the same column */}
+        <div className="card">
           <ChatPanel />
         </div>
       </div>

@@ -7,6 +7,7 @@ const EasternSeaboardVessels = () => {
   const [selectedVessel, setSelectedVessel] = useState(null);
   const [filter, setFilter] = useState('all'); // all, cargo, passenger, tanker, etc.
   const [showDetailedInfo, setShowDetailedInfo] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   // Fetch vessel data from API
   const fetchVessels = async () => {
@@ -52,6 +53,7 @@ const EasternSeaboardVessels = () => {
       const limitedVessels = sortedVessels.slice(0, 10);
       
       setVessels(limitedVessels);
+      setLastUpdated(new Date());
       setLoading(false);
     } catch (err) {
       console.error('Error fetching vessel data:', err);
@@ -64,8 +66,8 @@ const EasternSeaboardVessels = () => {
   useEffect(() => {
     fetchVessels();
     
-    // Poll every 30 seconds
-    const interval = setInterval(fetchVessels, 30000);
+    // Poll every 10 seconds
+    const interval = setInterval(fetchVessels, 10000);
     
     return () => clearInterval(interval);
   }, []);
@@ -108,7 +110,7 @@ const EasternSeaboardVessels = () => {
 
   return (
     <div className="eastern-seaboard-vessels">
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-3 flex justify-between items-center">
         <h2 className="text-xl font-bold text-blue-800">Eastern Seaboard Vessels</h2>
         
         <div className="flex items-center space-x-2">
@@ -131,9 +133,27 @@ const EasternSeaboardVessels = () => {
         </div>
       </div>
       
-      <p className="mb-6 text-textSecondary">
-        Monitoring vessels along the Eastern Seaboard with special focus on those approaching the Washington DC area through the Chesapeake Bay and Potomac River. Sorted by proximity to DC.
-      </p>
+      <div className="mb-6">
+        <div className="flex justify-between items-center">
+          <p className="text-textSecondary">
+            Monitoring vessels along the Eastern Seaboard with special focus on those approaching the Washington DC area through the Chesapeake Bay and Potomac River. Sorted by proximity to DC.
+          </p>
+          
+          {lastUpdated && (
+            <div className="flex items-center text-xs text-textSecondary">
+              <span className={loading ? 'flex items-center text-accentBlue' : ''}>
+                {loading && (
+                  <svg className="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                Last update: {lastUpdated.toLocaleTimeString()}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
       
       {loading ? (
         <div className="flex justify-center p-8">

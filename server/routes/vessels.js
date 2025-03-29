@@ -4,8 +4,8 @@ const datalasticService = require('../services/datalastic');
 const anomalyService = require('../services/anomaly');
 const emailService = require('../services/email');
 
-// Polling interval in milliseconds (30 seconds)
-const POLL_INTERVAL = 30000;
+// Polling interval in milliseconds (10 seconds)
+const POLL_INTERVAL = 10000;
 
 // Store data from last poll
 let lastPollData = {
@@ -108,10 +108,34 @@ async function pollVesselData() {
 
 // Get vessels
 router.get('/', (req, res) => {
+  // Ensure vessels have MMSIs
+  const vesselsWithMMSI = lastPollData.vessels.map(vessel => {
+    // If vessel doesn't have an MMSI, give it a placeholder
+    if (!vessel.mmsi) {
+      console.warn('Found vessel without MMSI:', vessel);
+      return {
+        ...vessel,
+        mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+    return vessel;
+  });
+
+  // Convert vessels array to an object with MMSI as keys
+  const vesselsObject = {};
+  vesselsWithMMSI.forEach(vessel => {
+    vesselsObject[vessel.mmsi] = {
+      data: { ...vessel },
+      firstTracked: Date.now(),
+      lastUpdated: new Date().toISOString(),
+      cached: false
+    };
+  });
+
   res.json({
-    vessels: lastPollData.vessels,
-    count: lastPollData.vessels.length,
-    lastUpdated: lastPollData.lastUpdated
+    success: true,
+    vessels: vesselsObject,
+    count: vesselsWithMMSI.length
   });
 });
 
@@ -200,26 +224,74 @@ router.delete('/track/:mmsi', (req, res) => {
 
 // Get anomalies
 router.get('/anomalies', (req, res) => {
+  // Ensure all vessels in anomalies have MMSIs
+  const anomalies = {
+    routeDeviations: lastPollData.anomalies.routeDeviations.map(vessel => {
+      if (!vessel.mmsi) {
+        console.warn('Found route deviation without MMSI:', vessel);
+        return {
+          ...vessel,
+          mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+        };
+      }
+      return vessel;
+    }),
+    aisShutoffs: lastPollData.anomalies.aisShutoffs.map(vessel => {
+      if (!vessel.mmsi) {
+        console.warn('Found AIS shutoff without MMSI:', vessel);
+        return {
+          ...vessel,
+          mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+        };
+      }
+      return vessel;
+    })
+  };
+
   res.json({
-    anomalies: lastPollData.anomalies,
+    anomalies: anomalies,
     lastUpdated: lastPollData.lastUpdated
   });
 });
 
 // Get route deviations
 router.get('/anomalies/deviations', (req, res) => {
+  // Ensure all vessels have MMSIs
+  const deviations = lastPollData.anomalies.routeDeviations.map(vessel => {
+    if (!vessel.mmsi) {
+      console.warn('Found route deviation without MMSI:', vessel);
+      return {
+        ...vessel,
+        mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+    return vessel;
+  });
+
   res.json({
-    deviations: lastPollData.anomalies.routeDeviations,
-    count: lastPollData.anomalies.routeDeviations.length,
+    deviations: deviations,
+    count: deviations.length,
     lastUpdated: lastPollData.lastUpdated
   });
 });
 
 // Get AIS shutoffs
 router.get('/anomalies/shutoffs', (req, res) => {
+  // Ensure all vessels have MMSIs
+  const shutoffs = lastPollData.anomalies.aisShutoffs.map(vessel => {
+    if (!vessel.mmsi) {
+      console.warn('Found AIS shutoff without MMSI:', vessel);
+      return {
+        ...vessel,
+        mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+    return vessel;
+  });
+
   res.json({
-    shutoffs: lastPollData.anomalies.aisShutoffs,
-    count: lastPollData.anomalies.aisShutoffs.length,
+    shutoffs: shutoffs,
+    count: shutoffs.length,
     lastUpdated: lastPollData.lastUpdated
   });
 });
@@ -239,9 +311,22 @@ router.get('/:mmsi', (req, res) => {
 
 // Get all Eastern Seaboard vessels (not filtered by geofence)
 router.get('/eastern-seaboard', (req, res) => {
+  // Ensure vessels have MMSIs
+  const vesselsWithMMSI = easternSeaboardVessels.map(vessel => {
+    // If vessel doesn't have an MMSI, give it a placeholder
+    if (!vessel.mmsi) {
+      console.warn('Found eastern seaboard vessel without MMSI:', vessel);
+      return {
+        ...vessel,
+        mmsi: vessel.mmsi || vessel.id || `unknown-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`
+      };
+    }
+    return vessel;
+  });
+
   res.json({
-    vessels: easternSeaboardVessels,
-    count: easternSeaboardVessels.length,
+    vessels: vesselsWithMMSI,
+    count: vesselsWithMMSI.length,
     lastUpdated: easternSeaboardLastUpdated
   });
 });
